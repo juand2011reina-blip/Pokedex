@@ -1,6 +1,6 @@
-import React from "react";
-import PokemonCard from "./components/PokemonCard.jsx";
-import "./App.css";
+import React, { useState, useEffect } from 'react';
+import PokemonCard from './components/PokemonCard.jsx';
+import './App.css';
 
 export default function App() {
   const [pokemons, setPokemons] = useState([]);
@@ -8,88 +8,99 @@ export default function App() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    // Definimos un controlador de aborto por si el componente se desmonta a mitad de la petición
+    const controller = new AbortController();
+
     const fetchPokemonData = async () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch('https://pokeapi.co/api/v2/pokemon?limit=20');
-        if (!response.ok) throw new Error('Error al conectar con la PokéAPI.');
+
+        const response = await fetch('https://pokeapi.co/api/v2/pokemon?limit=20', {
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error('No se pudo obtener la lista de Pokémon de la base de datos.');
+        }
+
         const data = await response.json();
         
+        // Mapeamos las peticiones asegurando el manejo de errores internos
         const detailedRequests = data.results.map(async (pokemon) => {
-          const res = await fetch(pokemon.url);
+          const res = await fetch(pokemon.url, { signal: controller.signal });
+          if (!res.ok) throw new Error(`Error al cargar datos de ${pokemon.name}`);
           return res.json();
         });
 
         const detailedData = await Promise.all(detailedRequests);
         setPokemons(detailedData);
+
       } catch (err) {
-        setError(err.message || 'Ocurrió un error inesperado.');
+        if (err.name !== 'AbortError') {
+          setError(err.message || 'Ocurrió un problema de conexión.');
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    fetchPokemonData();
+  	fetchPokemonData();
+
+    // Función de limpieza del useEffect
+    return () => controller.abort();
   }, []);
 
   return (
     <div className="min-h-screen bg-slate-900 bg-[radial-gradient(#2c3e50_1px,transparent_1px)] [background-size:16px_16px] text-white p-4 md:p-8 flex justify-center items-center">
       
-      {/* CONTENEDOR PRINCIPAL DE LA POKÉDEX */}
       <div className="w-full max-w-6xl bg-red-600 border-8 border-red-700 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-6 relative overflow-hidden">
         
-        {/* DETALLES DE LA PARTE SUPERIOR (CÁMARA Y LUCES) */}
+        {/* Leds superiores */}
         <div className="flex items-center gap-3 border-b-4 border-red-700 pb-5 mb-6">
-          {/* Lente Azul Grande */}
           <div className="w-14 h-14 bg-sky-400 border-4 border-white rounded-full shadow-[0_0_15px_#38bdf8] animate-pulse"></div>
-          {/* Luces Pequeñas (Semáforo) */}
           <div className="w-4 h-4 bg-red-500 border border-red-700 rounded-full"></div>
           <div className="w-4 h-4 bg-yellow-400 border border-yellow-600 rounded-full"></div>
           <div className="w-4 h-4 bg-green-500 border border-green-700 rounded-full"></div>
-          {/* Línea decorativa de la Pokédex */}
           <div className="ml-auto h-2 w-1/3 bg-red-800 rounded-full opacity-50"></div>
         </div>
 
-        {/* PANTALLA PRINCIPAL */}
-        <div className="bg-zinc-800 border-4 border-zinc-700 rounded-2xl p-4 md:p-6 shadow-inner min-h-[60vh]">
+        {/* Pantalla principal */}
+        <div className="bg-zinc-800 border-4 border-zinc-700 rounded-2xl p-4 md:p-6 shadow-inner min-h-[60vh] flex flex-col justify-center">
           
-          {/* Estado de Carga */}
           {loading && (
-            <div className="flex flex-col items-center justify-center min-h-[50vh]">
+            <div className="flex flex-col items-center justify-center py-12">
               <div className="w-16 h-16 border-8 border-zinc-600 border-t-amber-400 rounded-full animate-spin mb-4"></div>
-              <p className="text-xl font-mono text-amber-400 tracking-widest animate-pulse">ACCEDIENDO A LA BASE DE DATOS...</p>
+              <p className="text-xl font-mono text-amber-400 tracking-widest animate-pulse text-center">
+                ACCEDIENDO A LA BASE DE DATOS...
+              </p>
             </div>
           )}
 
-          {/* Estado de Error */}
           {error && (
-            <div className="flex flex-col items-center justify-center min-h-[50vh] bg-red-950/50 border border-red-500 p-6 rounded-xl font-mono">
-              <p className="text-red-400 text-2xl font-bold mb-2">⚠ ERROR DE CONEXIÓN</p>
+            <div className="flex flex-col items-center justify-center p-6 bg-red-950/50 border border-red-500 rounded-xl font-mono">
+              <p className="text-red-400 text-2xl font-bold mb-2">⚠ ERROR DEL SISTEMA</p>
               <p className="text-zinc-300 text-center">{error}</p>
             </div>
           )}
 
-          {/* Grid de Pokémon */}
           {!loading && !error && (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 overflow-y-auto max-h-[70vh] pr-2 custom-scrollbar">
               {pokemons.map((pokemon) => (
-                <PokemonCard key={pokemon.id} pokemon={pokemon} />
+                // Usamos una combinación robusta para la key (id + nombre)
+                <PokemonCard key={`${pokemon.id}-${pokemon.name}`} pokemon={pokemon} />
               ))}
             </div>
           )}
         </div>
 
-        {/* CONTROLES INFERIORES DE LA POKÉDEX */}
+        {/* Controles inferiores */}
         <div className="flex justify-between items-center mt-6 pt-2 border-t-4 border-red-700">
-          {/* Botón Negro Grande (Pad Direccional simulado u opción) */}
           <div className="w-12 h-12 bg-zinc-900 rounded-full border-4 border-zinc-800 shadow-md"></div>
-          {/* Luces alargadas de barras */}
           <div className="flex gap-4">
             <div className="w-12 h-3 bg-indigo-600 rounded-full shadow-inner"></div>
             <div className="w-12 h-3 bg-emerald-600 rounded-full shadow-inner"></div>
           </div>
-          {/* Rejilla de Ventilación / Altavoz */}
           <div className="flex flex-col gap-1 w-16">
             <div className="h-1 bg-zinc-900/40 rounded"></div>
             <div className="h-1 bg-zinc-900/40 rounded"></div>
